@@ -15,6 +15,8 @@ struct ContentView: View {
     @State private var presentingPhotosPicker = false
     @State private var showingCameraPicker = false
     @State private var showingSettingsSheet = false
+    @State private var showingModelImporter = false
+    @State private var importedModelURL: URL? = nil
 
     var body: some View {
         Group {
@@ -51,6 +53,12 @@ struct ContentView: View {
                             .imageScale(.medium)
                     }
                     .disabled(viewModel.isModelLoading)
+                    Button {
+                        showingModelImporter = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                    }
+                    .help("导入模型文件")
                 }
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -101,6 +109,15 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettingsSheet) {
             InferenceSettingsView(viewModel: viewModel)
         }
+        .sheet(isPresented: $showingModelImporter) {
+            ModelFileImporter(importedURL: $importedModelURL)
+                .onDisappear {
+                    if let url = importedModelURL {
+                        viewModel.isModelLoading = true
+                        viewModel.importModelFile(url: url)
+                    }
+                }
+        } 
     }
 
     // Extracted main chat interface to a new computed property
@@ -131,7 +148,7 @@ struct ContentView: View {
     }
 
     private var shouldShowLoadingView: Bool {
-        viewModel.isModelLoading && viewModel.messages.isEmpty
+        viewModel.isModelLoading
     }
 
     private var loadingView: some View {

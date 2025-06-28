@@ -48,6 +48,7 @@ class ChatViewModel: ObservableObject {
     /// Stores a critical error message if model initialization fails
     @Published public var criticalError: String?
     @Published public var isApplyingSettings: Bool = false // For disabling UI during settings application
+    @Published var importedModelURL: URL? = nil // 新增：存储导入的模型路径
 
     // MARK: - Model Switching State
     /// List of models found in the app bundle.
@@ -106,28 +107,34 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    // MARK: - 导入模型文件
+    func importModelFile(url: URL) {
+        self.importedModelURL = url
+        // 直接用新模型路径重新加载模型
+        Task {
+            await switchModel(to: selectedModelIdentifier)
+        }
+    }
+
     /// Loads and initializes the specified LLM model and chat session.
     /// This is an async operation that updates loading states and messages.
     private func loadAndInitializeModel(identifier: ModelIdentifier) async {
         isModelLoading = true
         messages.removeAll()
-        criticalError = nil // Clear any previous critical error
-        
-        // Provide immediate feedback that loading has started
+        criticalError = nil
         messages.append(Message(content: "Initializing \(identifier.displayName)... Please wait.", isUserMessage: false))
-
         do {
             NSLog("Attempting to load model: \(identifier.displayName)")
-            currentOnDeviceModel = try OnDeviceModel(modelIdentifier: identifier)
-            currentChat = try Chat(model: currentOnDeviceModel!,
+            // 直接用外部模型路径，不再复制到缓存
+            let model = try OnDeviceModel(modelIdentifier: identifier, externalModelURL: importedModelURL)
+            currentOnDeviceModel = model
+            currentChat = try Chat(model: model,
                                    topK: self.topK,
-                                   topP: Float(self.topP), // Cast to Float
-                                   temperature: Float(self.temperature), // Cast to Float
+                                   topP: Float(self.topP),
+                                   temperature: Float(self.temperature),
                                    enableVisionModality: self.enableVisionModality)
-            
-            messages.removeAll() // Clear "Initializing..." message
+            messages.removeAll()
             messages.append(Message(content: "Model \(identifier.displayName) loaded. Hello! How can I help?", isUserMessage: false))
-            
             if let modelMetrics = self.currentOnDeviceModel?.inference.metrics {
                 self.modelInitializationTime = modelMetrics.initializationTimeInSeconds
                 NSLog("\(identifier.displayName) initialization time: \(self.modelInitializationTime)s")
@@ -135,15 +142,13 @@ class ChatViewModel: ObservableObject {
         } catch {
             let loadErrorMessage = "Error initializing \(identifier.displayName): \(error.localizedDescription)"
             NSLog(loadErrorMessage)
-            messages.removeAll() // Clear "Initializing..." message
+            messages.removeAll()
             messages.append(Message(content: loadErrorMessage, isUserMessage: false))
-            criticalError = loadErrorMessage // Set critical error to be displayed by ContentView
+            criticalError = loadErrorMessage
         }
-        
-        // Reset states after loading attempt
         isModelLoading = false
         isThinking = false
-        showStats = false // Stats are for responses, not initial load
+        showStats = false
         clearSelectedImage()
         inputText = ""
     }

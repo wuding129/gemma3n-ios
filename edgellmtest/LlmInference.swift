@@ -38,6 +38,7 @@ public enum ModelIdentifier: String, CaseIterable, Identifiable {
 struct OnDeviceModel {
     private(set) var inference: LlmInference
     let identifier: ModelIdentifier // Identifier for the loaded model (e.g., 2B or 4B)
+    let modelFileURL: URL? // Optional: user-supplied model file path
     
     /// Initializes the `OnDeviceModel` with the specified `ModelIdentifier`.
     /// This involves copying the model `.task` file from the bundle to a cache directory,
@@ -47,32 +48,35 @@ struct OnDeviceModel {
     /// - Parameter modelIdentifier: The identifier of the model to load.
     /// - Throws: An error if the model file is not found in the bundle, if copying/extraction fails,
     ///           or if `LlmInference` initialization fails.
-    init(modelIdentifier: ModelIdentifier) throws {
+    init(modelIdentifier: ModelIdentifier, externalModelURL: URL? = nil) throws {
         self.identifier = modelIdentifier
+        self.modelFileURL = externalModelURL
         let fileManager = FileManager.default
         let cacheDir = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         try fileManager.createDirectory(at: cacheDir, withIntermediateDirectories: true, attributes: nil)
 
-        // Use modelIdentifier to get the correct model file
-        guard let bundleModelPath = Bundle.main.path(forResource: modelIdentifier.rawValue, ofType: "task") else {
-            let errorMessage = "Critical Error: Model file '\(modelIdentifier.fileName)' not found in the app bundle. Please ensure it's added to the project and target."
+        // 优先使用外部模型路径
+        let modelSourcePath: String
+        if let externalURL = externalModelURL, FileManager.default.fileExists(atPath: externalURL.path) {
+            modelSourcePath = externalURL.path
+        } else if let bundleModelPath = Bundle.main.path(forResource: modelIdentifier.rawValue, ofType: "task") {
+            modelSourcePath = bundleModelPath
+        } else {
+            let errorMessage = "Critical Error: Model file not found in app sandbox or bundle. 请先导入模型文件或确保其已打包。"
             NSLog(errorMessage)
             throw NSError(domain: "ModelSetupError", code: 1001, userInfo: [NSLocalizedDescriptionKey: errorMessage])
         }
-        let modelCopyPath = cacheDir.appendingPathComponent(modelIdentifier.fileName)
-        
+
+        // 不再复制模型文件，直接用外部路径
+        let modelCopyPath = URL(fileURLWithPath: modelSourcePath)
         NSLog("Selected model: \(modelIdentifier.displayName)")
-        NSLog("Bundle path: \(bundleModelPath)")
+        NSLog("Source path: \(modelSourcePath)")
         NSLog("Cache path: \(modelCopyPath.path)")
 
-        if !FileManager.default.fileExists(atPath: modelCopyPath.path) {
-            try FileManager.default.copyItem(atPath: bundleModelPath, toPath: modelCopyPath.path)
-        }
-
-        // Define internal filenames for vision components expected within the .task archive
-        let visionEncoderFileName = "TF_LITE_VISION_ENCODER" // Assumed internal name for the vision encoder
-        let visionAdapterFileName = "TF_LITE_VISION_ADAPTER" // Assumed internal name for the vision adapter
-
+        // vision 相关逻辑保持不变
+        let visionEncoderFileName = "TF_LITE_VISION_ENCODER"
+        let visionAdapterFileName = "TF_LITE_VISION_ADAPTER"
+        // cacheDir 已在前面声明，这里直接用
         let extractedVisionEncoderPath = cacheDir.appendingPathComponent(visionEncoderFileName)
         let extractedVisionAdapterPath = cacheDir.appendingPathComponent(visionAdapterFileName)
 
