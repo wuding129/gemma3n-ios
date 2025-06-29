@@ -81,29 +81,27 @@ class ChatViewModel: ObservableObject {
         self.availableModels = ModelIdentifier.availableInBundle()
 
         if availableModels.isEmpty {
-            let noModelsErrorMessage = "Critical Error: No LLM models found in the app bundle. Please ensure model files (e.g., *.task) are correctly added to the project."
-            NSLog(noModelsErrorMessage)
-            criticalError = noModelsErrorMessage
+            NSLog("No bundled models found. Awaiting user import.")
+            messages.append(Message(content: "Welcome! To get started, please import a model file using the button above.", isUserMessage: false))
             isModelLoading = false
-            return
-        }
+        } else {
+            var initialModelToLoad = ModelIdentifier.gemma2B // Default desired model
 
-        var initialModelToLoad = ModelIdentifier.gemma2B // Default desired model
+            // Determine the actual initial model based on availability and preference
+            let preferredModelFromStorage = ModelIdentifier(rawValue: selectedModelIdentifierRawValue)
+            if let prefModel = preferredModelFromStorage, availableModels.contains(prefModel) {
+                initialModelToLoad = prefModel
+            } else if availableModels.contains(.gemma2B) {
+                initialModelToLoad = .gemma2B
+            } else if let firstAvailable = availableModels.first {
+                initialModelToLoad = firstAvailable
+            }
+            
+            self.selectedModelIdentifier = initialModelToLoad
 
-        // Determine the actual initial model based on availability and preference
-        let preferredModelFromStorage = ModelIdentifier(rawValue: selectedModelIdentifierRawValue)
-        if let prefModel = preferredModelFromStorage, availableModels.contains(prefModel) {
-            initialModelToLoad = prefModel
-        } else if availableModels.contains(.gemma2B) {
-            initialModelToLoad = .gemma2B
-        } else if let firstAvailable = availableModels.first {
-            initialModelToLoad = firstAvailable
-        }
-        
-        self.selectedModelIdentifier = initialModelToLoad
-
-        Task {
-            await loadAndInitializeModel(identifier: initialModelToLoad)
+            Task {
+                await loadAndInitializeModel(identifier: initialModelToLoad)
+            }
         }
     }
 

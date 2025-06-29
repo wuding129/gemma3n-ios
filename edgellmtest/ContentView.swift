@@ -127,8 +127,13 @@ struct ContentView: View {
             if viewModel.modelInitializationTime > 0 && viewModel.criticalError == nil {
                 statsDisplayView
             }
-            chatMessagesView
-                .padding(.bottom, 10)
+
+            if viewModel.isModelLoading {
+                loadingView
+            } else {
+                chatMessagesView
+                    .padding(.bottom, 10)
+            }
             inputAreaView
         }
     }
@@ -137,18 +142,8 @@ struct ContentView: View {
     private var chatMessagesView: some View {
         AutoScrollingScrollView(messages: $viewModel.messages, isAutoScrollEnabled: $viewModel.isAutoScrollEnabled) {
             // The content for AutoScrollingScrollView is what was previously in chatContentView
-            Group {
-                if shouldShowLoadingView {
-                    loadingView
-                } else {
-                    messagesListView
-                }
-            }
+            messagesListView
         }
-    }
-
-    private var shouldShowLoadingView: Bool {
-        viewModel.isModelLoading
     }
 
     private var loadingView: some View {
